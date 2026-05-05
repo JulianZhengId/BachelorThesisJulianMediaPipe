@@ -1,0 +1,22 @@
+(ALTERNATIVE 1) 
+control of franka robot arm in UE or unity for VR
+* needed to simulate the robot before we go from VR to reality
+
+(ALTERNATIVE 2)
+Feedback (and other neuroscience visualization methods)
+* how to design the most effective feedbakc mechanisms for audio/visual/haptic
+* applies to both center-out, VR, and other etc
+
+(NO)
+Mujoku model visualization in Unreal env
+* can use sophisticated models, replicated in unreal
+* all information contained within the model (could be muscular dynamics, force information, etc) would be coupled with the improved visualization of UE
+
+(NO)
+2D to 3D with VR
+* how to replicate a 2D game into a 3D VR environment
+
+(NO)
+custom controller instead of meta controller
+* someday, we'd like to train a model to predict the patients desired hand location and orientation
+* this information would be used to drive a meta controller
