@@ -2,7 +2,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import argparse
 import logging
-import sys
 from pathlib import Path
 from benchmarks import FilterBenchmark
 from utils import LandmarksProcessor, FilesManager
@@ -40,6 +39,11 @@ def capture_data(video_path):
 
     frames_data = []
 
+    filedir = Path(video_path).parent
+    fourcc = cv2.VideoWriter_fourcc(*'XVID')
+    output_video_path = filedir / "vid_with_landmarks.mp4"
+    out = cv2.VideoWriter(output_video_path, fourcc, cap.get(cv2.CAP_PROP_FPS), (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))))
+
     while cap.isOpened():
         success, frame = cap.read()
 
@@ -67,12 +71,14 @@ def capture_data(video_path):
             frames_data.append(new_frame_data)
 
             cv2.imshow('preview', frame)
+            out.write(frame)
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
 
     ### close visualizer
     cap.release()
+    out.release()
     cv2.destroyAllWindows()
 
     log.info('capture raw data done.')
@@ -87,7 +93,7 @@ def apply_butterworth_filter(landmarks_data:np.ndarray):
     num_joints = landmarks_data.shape[1]
 
     cutoff = 3
-    sampling_rate = 29.94
+    sampling_rate = 30
     order = 2
 
     butterworth_filter = ButterworthFilter(cutoff=cutoff, sampling_rate=sampling_rate, order=order)
@@ -109,9 +115,9 @@ def apply_one_euro_filter(landmarks_data:np.ndarray):
     log.info('starting one euro filter...')
     num_frames = landmarks_data.shape[0]
     num_joints = landmarks_data.shape[1]
-    min_cutoff = 2
+    min_cutoff = 1
     sampling_rate = 30
-    beta = 1
+    beta = 0.5
 
     one_euro_filtered_landmarks_data = np.empty((num_frames, num_joints, 3))
     for joint_idx in range(num_joints):
@@ -128,7 +134,7 @@ def apply_one_euro_filter(landmarks_data:np.ndarray):
     log.info('one euro filter done.')
     return one_euro_filtered_landmarks_data
 
-def apply_kalman_filter_one_way(raw_data: np.ndarray, process_noise=1e-4, measurement_noise=1e-2, fps=30):
+def apply_kalman_filter_one_way(raw_data: np.ndarray, process_noise, measurement_noise, fps=30):
     from utils import KalmanFilterND
     num_frames, num_landmarks, num_dims = raw_data.shape
 
@@ -140,7 +146,7 @@ def apply_kalman_filter_one_way(raw_data: np.ndarray, process_noise=1e-4, measur
 
     return filtered
 
-def apply_kalman_filter(raw_data, process_noise=1e-1, measurement_noise=9e-2, fps=30):
+def apply_kalman_filter(raw_data, process_noise=1e-3, measurement_noise=5e-4, fps=30):
     log.info('starting kalman filter...')
     num_frames = raw_data.shape[0]
     kalman_data = raw_data.copy()
@@ -217,133 +223,62 @@ def main(args):
     plt.title("Index Fingertip Y Over Time")
     plt.show()
 
-    butterworth_index_x = butterworth_data[:, 8, 0]
-    butterworth_index_y = butterworth_data[:, 8, 1]
-    butterworth_index_z = butterworth_data[:, 8, 2]
+    print("---------------------------- BENCHMARKS --------------------------------------")
 
-    one_euro_index_x = one_euro_data[:, 8, 0]
-    one_euro_index_y = one_euro_data[:, 8, 1]
-    one_euro_index_z = one_euro_data[:, 8, 2]
+    total_mean_acceleration_raw = 0
+    total_mean_acceleration_butterworth = 0
+    total_mean_acceleration_one_euro = 0
+    total_mean_acceleration_kalman = 0
 
-    print("--------------------------- ACCELERATION METRIC -------------------------------")
+    total_mean_jerk_raw = 0
+    total_mean_jerk_butterworth = 0
+    total_mean_jerk_one_euro = 0
+    total_mean_jerk_kalman = 0
 
-    raw_acceleration_x = FilterBenchmark.acceleration_metric(raw_data[:, 8, 0])
-    raw_acceleration_y = FilterBenchmark.acceleration_metric(raw_data[:, 8, 1])
-    raw_acceleration_z = FilterBenchmark.acceleration_metric(raw_data[:, 8, 2])
+    total_direction_changes_raw = 0
+    total_direction_changes_butterworth = 0
+    total_direction_changes_one_euro = 0
+    total_direction_changes_kalman = 0
 
-    butterworth_acceleration_x = FilterBenchmark.acceleration_metric(butterworth_index_x)
-    butterworth_acceleration_y = FilterBenchmark.acceleration_metric(butterworth_index_y)
-    butterworth_acceleration_z = FilterBenchmark.acceleration_metric(butterworth_index_z)
+    for i in range(21):
+        for j in range (3):
+            total_mean_acceleration_raw += FilterBenchmark.acceleration_metric(raw_data[:, i, j])
+            total_mean_acceleration_butterworth += FilterBenchmark.acceleration_metric(butterworth_data[:, i, j])
+            total_mean_acceleration_one_euro += FilterBenchmark.acceleration_metric(one_euro_data[:, i, j])
+            total_mean_acceleration_kalman += FilterBenchmark.acceleration_metric(kalman_data[:, i, j])
 
-    one_euro_acceleration_x = FilterBenchmark.acceleration_metric(one_euro_index_x)
-    one_euro_acceleration_y = FilterBenchmark.acceleration_metric(one_euro_index_y)
-    one_euro_acceleration_z = FilterBenchmark.acceleration_metric(one_euro_index_z)
+            total_mean_jerk_raw += FilterBenchmark.jerk_metric(raw_data[:, i, j])
+            total_mean_jerk_butterworth += FilterBenchmark.jerk_metric(butterworth_data[:, i, j])
+            total_mean_jerk_one_euro += FilterBenchmark.jerk_metric(one_euro_data[:, i, j])
+            total_mean_jerk_kalman += FilterBenchmark.jerk_metric(kalman_data[:, i, j])
 
-    print("Acceleration Raw Index X: " + str(raw_acceleration_x))
-    print("Acceleration Butterworth Index X: " + str(butterworth_acceleration_x))
-    print("Acceleration One Euro Index X: " + str(one_euro_acceleration_x))
+            total_direction_changes_raw += FilterBenchmark.direction_changes_metric(raw_data[:, i, j])
+            total_direction_changes_butterworth += FilterBenchmark.direction_changes_metric(butterworth_data[:, i, j])
+            total_direction_changes_one_euro += FilterBenchmark.direction_changes_metric(one_euro_data[:, i, j])
+            total_direction_changes_kalman += FilterBenchmark.direction_changes_metric(kalman_data[:, i, j])
+
+    print("Total Mean Acceleration Raw Data: " + str(total_mean_acceleration_raw))
+    print("Total Mean Acceleration Butterworth Data: " + str(total_mean_acceleration_butterworth))
+    print("Total Mean Acceleration One Euro Data: " + str(total_mean_acceleration_one_euro))
+    print("Total Mean Acceleration Kalman Data: " + str(total_mean_acceleration_kalman))
 
     print("------------------------------------------------------------------------------")
 
-    print("Acceleration Raw Index Y: " + str(raw_acceleration_y))
-    print("Acceleration Butterworth Index Y: " + str(butterworth_acceleration_y))
-    print("Acceleration One Euro Index Y: " + str(one_euro_acceleration_y))
+    print("Total Mean Jerk Raw Data: " + str(total_mean_jerk_raw))
+    print("Total Mean Jerk Butterworth Data: " + str(total_mean_jerk_butterworth))
+    print("Total Mean Jerk One Euro Data: " + str(total_mean_jerk_one_euro))
+    print("Total Mean Jerk Kalman Data: " + str(total_mean_jerk_kalman))
 
     print("------------------------------------------------------------------------------")
 
-    print("Acceleration Raw Index Z: " + str(raw_acceleration_z))
-    print("Acceleration Butterworth Index Z: " + str(butterworth_acceleration_z))
-    print("Acceleration One Euro Index Z: " + str(one_euro_acceleration_z))
+    print("Total Direction Changes Raw Data: " + str(total_direction_changes_raw))
+    print("Total Direction Changes Butterworth Data: " + str(total_direction_changes_butterworth))
+    print("Total Direction Changes One Euro Data: " + str(total_direction_changes_one_euro))
+    print("Total Direction Changes Kalman Data: " + str(total_direction_changes_kalman))
+
+    print("------------------------------------------------------------------------------")
 
     print()
-
-    print("--------------------------- JERK METRIC --------------------------------------")
-
-    raw_jerk_x = FilterBenchmark.jerk_metric(raw_data[:, 8, 0])
-    raw_jerk_y = FilterBenchmark.jerk_metric(raw_data[:, 8, 1])
-    raw_jerk_z = FilterBenchmark.jerk_metric(raw_data[:, 8, 2])
-
-    butterworth_jerk_x = FilterBenchmark.jerk_metric(butterworth_index_x)
-    butterworth_jerk_y = FilterBenchmark.jerk_metric(butterworth_index_y)
-    butterworth_jerk_z = FilterBenchmark.jerk_metric(butterworth_index_z)
-
-    one_euro_jerk_x = FilterBenchmark.jerk_metric(one_euro_index_x)
-    one_euro_jerk_y = FilterBenchmark.jerk_metric(one_euro_index_y)
-    one_euro_jerk_z = FilterBenchmark.jerk_metric(one_euro_index_z)
-
-    print("Jerk Raw Index X: " + str(raw_jerk_x))
-    print("Jerk Butterworth Index X: " + str(butterworth_jerk_x))
-    print("Jerk One Euro Index X: " + str(one_euro_jerk_x))
-
-    print("------------------------------------------------------------------------------")
-
-    print("Jerk Raw Index Y: " + str(raw_jerk_y))
-    print("Jerk Butterworth Index Y: " + str(butterworth_jerk_y))
-    print("Jerk One Euro Index Y: " + str(one_euro_jerk_y))
-
-    print("------------------------------------------------------------------------------")
-
-    print("Jerk Raw Index Z: " + str(raw_jerk_z))
-    print("Jerk Butterworth Index Z: " + str(butterworth_jerk_z))
-    print("Jerk One Euro Index Z: " + str(one_euro_jerk_z))
-
-    print()
-
-    print("--------------------------- DIRECTIONS CHANGES -------------------------------")
-
-    raw_sign_x = FilterBenchmark.direction_changes_metric(raw_data[:, 8, 0])
-    raw_sign_y = FilterBenchmark.direction_changes_metric(raw_data[:, 8, 1])
-    raw_sign_z = FilterBenchmark.direction_changes_metric(raw_data[:, 8, 2])
-
-    butterworth_sign_x = FilterBenchmark.direction_changes_metric(butterworth_index_x)
-    butterworth_sign_y = FilterBenchmark.direction_changes_metric(butterworth_index_y)
-    butterworth_sign_z = FilterBenchmark.direction_changes_metric(butterworth_index_z)
-
-    one_euro_sign_x = FilterBenchmark.direction_changes_metric(one_euro_index_x)
-    one_euro_sign_y = FilterBenchmark.direction_changes_metric(one_euro_index_y)
-    one_euro_sign_z = FilterBenchmark.direction_changes_metric(one_euro_index_z)
-
-    print("Sign Raw Index X: " + str(raw_sign_x))
-    print("Sign Butterworth Index X: " + str(butterworth_sign_x))
-    print("Sign One Euro Index X: " + str(one_euro_sign_x))
-
-    print("------------------------------------------------------------------------------")
-
-    print("Sign Raw Index Y: " + str(raw_sign_y))
-    print("Sign Butterworth Index Y: " + str(butterworth_sign_y))
-    print("Sign One Euro Index Y: " + str(one_euro_sign_y))
-
-    print("------------------------------------------------------------------------------")
-
-    print("Sign Raw Index Z: " + str(raw_sign_z))
-    print("Sign Butterworth Index Z: " + str(butterworth_sign_z))
-    print("Sign One Euro Index Z: " + str(one_euro_sign_z))
-
-    print()
-
-    print("--------------------------- EFFICIENCY ---------------------------------------")
-
-
-    butterworth_efficiency_x = FilterBenchmark.filter_efficiency(raw_data[:, 8, 0], butterworth_index_x)
-    butterworth_efficiency_y = FilterBenchmark.filter_efficiency(raw_data[:, 8, 1], butterworth_index_y)
-    butterworth_efficiency_z = FilterBenchmark.filter_efficiency(raw_data[:, 8, 2], butterworth_index_z)
-
-    one_euro_efficiency_x = FilterBenchmark.filter_efficiency(raw_data[:, 8, 0], one_euro_index_x)
-    one_euro_efficiency_y = FilterBenchmark.filter_efficiency(raw_data[:, 8, 0], one_euro_index_y)
-    one_euro_efficiency_z = FilterBenchmark.filter_efficiency(raw_data[:, 8, 0], one_euro_index_z)
-
-    print("Efficiency Butterworth Index X: " + str(butterworth_efficiency_x))
-    print("Efficiency One Euro Index X: " + str(one_euro_efficiency_x))
-
-    print("------------------------------------------------------------------------------")
-
-    print("Efficiency Butterworth Index Y: " + str(butterworth_efficiency_y))
-    print("Efficiency One Euro Index Y: " + str(one_euro_efficiency_y))
-
-    print("------------------------------------------------------------------------------")
-
-    print("Efficiency Butterworth Index Z: " + str(butterworth_efficiency_z))
-    print("Efficiency One Euro Index Z: " + str(one_euro_efficiency_z))
 
     print('Done...')
 

@@ -92,7 +92,6 @@ class KalmanFilter1D:
         self.P = np.eye(3) * 1.0
 
         # Process noise
-        #self.Q = np.eye(3) * process_noise
         self.Q = process_noise * np.array([
             [dt ** 4 / 4, dt ** 3 / 2, dt ** 2 / 2],
             [dt ** 3 / 2, dt ** 2, dt],
