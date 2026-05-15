@@ -1,0 +1,18 @@
+Grasp 01
+---------------------------- BENCHMARKS --------------------------------------
+Total Mean Acceleration Raw Data: 0.12868540813299106
+Total Mean Acceleration Butterworth Data: 0.02241590068209958
+Total Mean Acceleration One Euro Data: 0.021157715065318668
+Total Mean Acceleration Kalman Data: 0.018286449677763918
+------------------------------------------------------------------------------
+Total Mean Jerk Raw Data: 0.2174491608251283
+Total Mean Jerk Butterworth Data: 0.011274315195794884
+Total Mean Jerk One Euro Data: 0.02618232777423767
+Total Mean Jerk Kalman Data: 0.00721774519298741
+------------------------------------------------------------------------------
+Total Direction Changes Raw Data: 5424
+Total Direction Changes Butterworth Data: 1597
+Total Direction Changes One Euro Data: 1987
+Total Direction Changes Kalman Data: 1365
+------------------------------------------------------------------------------
+

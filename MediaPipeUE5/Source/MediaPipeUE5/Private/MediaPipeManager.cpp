@@ -120,6 +120,6 @@ void UMediaPipeManager::RefineMediaPipeLandmarks(TArray<FVector>& RawLandmarks, 
 
 	for (int i = 1; i < RawLandmarks.Num(); i++)
 	{
-		RefinedLandmarks.Add(InitialPos + RawLandmarks[i] * NegatingVector * FVector(VerticalScalingFactor, (HorizontalScalingFactor + VerticalScalingFactor) / 1.5f, HorizontalScalingFactor));
+		RefinedLandmarks.Add(InitialPos + RawLandmarks[i] * NegatingVector * FVector(VerticalScalingFactor, (HorizontalScalingFactor + VerticalScalingFactor) / 2.f, HorizontalScalingFactor));
 	}
 }

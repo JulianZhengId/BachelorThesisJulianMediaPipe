@@ -1,0 +1,18 @@
+Middle Finger Flexion
+---------------------------- BENCHMARKS --------------------------------------
+Total Mean Acceleration Raw Data: 0.26414640752126906
+Total Mean Acceleration Butterworth Data: 0.02758913310910015
+Total Mean Acceleration One Euro Data: 0.03556519048650925
+Total Mean Acceleration Kalman Data: 0.01857922536663343
+------------------------------------------------------------------------------
+Total Mean Jerk Raw Data: 0.4603659536809504
+Total Mean Jerk Butterworth Data: 0.016048924873173928
+Total Mean Jerk One Euro Data: 0.0536316770577247
+Total Mean Jerk Kalman Data: 0.007830572000464631
+------------------------------------------------------------------------------
+Total Direction Changes Raw Data: 7691
+Total Direction Changes Butterworth Data: 2112
+Total Direction Changes One Euro Data: 3692
+Total Direction Changes Kalman Data: 1800
+------------------------------------------------------------------------------
+

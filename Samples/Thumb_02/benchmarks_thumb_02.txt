@@ -1,0 +1,17 @@
+Thumb Flexion 02
+---------------------------- BENCHMARKS --------------------------------------
+Total Mean Acceleration Raw Data: 0.10674288673452903
+Total Mean Acceleration Butterworth Data: 0.014509916952481437
+Total Mean Acceleration One Euro Data: 0.01552897709029049
+Total Mean Acceleration Kalman Data: 0.01110448525441284
+------------------------------------------------------------------------------
+Total Mean Jerk Raw Data: 0.18667305714870325
+Total Mean Jerk Butterworth Data: 0.007410435657081344
+Total Mean Jerk One Euro Data: 0.021825584945078552
+Total Mean Jerk Kalman Data: 0.0040068629074661005
+------------------------------------------------------------------------------
+Total Direction Changes Raw Data: 5589
+Total Direction Changes Butterworth Data: 1626
+Total Direction Changes One Euro Data: 2450
+Total Direction Changes Kalman Data: 1393
+------------------------------------------------------------------------------

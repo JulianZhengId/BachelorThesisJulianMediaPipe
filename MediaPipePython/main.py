@@ -41,7 +41,7 @@ def capture_data(video_path):
 
     filedir = Path(video_path).parent
     fourcc = cv2.VideoWriter_fourcc(*'XVID')
-    output_video_path = filedir / "vid_with_landmarks.mp4"
+    output_video_path = filedir / "landmarks_video.mp4"
     out = cv2.VideoWriter(output_video_path, fourcc, cap.get(cv2.CAP_PROP_FPS), (int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))))
 
     while cap.isOpened():
@@ -85,16 +85,12 @@ def capture_data(video_path):
     return np.array(frames_data)
 
 
-def apply_butterworth_filter(landmarks_data:np.ndarray):
+def apply_butterworth_filter(landmarks_data:np.ndarray, cutoff=3, sampling_rate=30, order=2):
     from utils import ButterworthFilter
     log.info('starting butterworth filter...')
 
     num_frames = landmarks_data.shape[0]
     num_joints = landmarks_data.shape[1]
-
-    cutoff = 3
-    sampling_rate = 30
-    order = 2
 
     butterworth_filter = ButterworthFilter(cutoff=cutoff, sampling_rate=sampling_rate, order=order)
     butterworth_filtered_landmarks_data = np.empty((num_frames, num_joints, 3))
@@ -134,29 +130,17 @@ def apply_one_euro_filter(landmarks_data:np.ndarray):
     log.info('one euro filter done.')
     return one_euro_filtered_landmarks_data
 
-def apply_kalman_filter_one_way(raw_data: np.ndarray, process_noise, measurement_noise, fps=30):
-    from utils import KalmanFilterND
-    num_frames, num_landmarks, num_dims = raw_data.shape
-
-    kalman = KalmanFilterND(num_landmarks, num_dims, process_noise, measurement_noise, fps)
-
-    filtered = np.zeros_like(raw_data)
-    for frame in range(num_frames):
-        filtered[frame] = kalman.update(raw_data[frame])
-
-    return filtered
-
-def apply_kalman_filter(raw_data, process_noise=1e-3, measurement_noise=5e-4, fps=30):
+def apply_kalman_filter(raw_data, process_noise=1e-1, measurement_noise=1e-5, fps=30):
     log.info('starting kalman filter...')
+    from utils import KalmanFilterND
     num_frames = raw_data.shape[0]
-    kalman_data = raw_data.copy()
+
+    kalman_filter = KalmanFilterND(process_noise=process_noise,measurement_noise=measurement_noise,fps=fps)
+    kalman_data = kalman_filter.smooth(raw_data)
+
     for frame_idx in range(num_frames):
         wrist_rotation = LandmarksProcessor.estimate_frame_from_hand_points(kalman_data[frame_idx])
         kalman_data[frame_idx] @= wrist_rotation
-
-    forward = apply_kalman_filter_one_way(kalman_data, process_noise, measurement_noise, fps)
-    backward = apply_kalman_filter_one_way(kalman_data[::-1], process_noise, measurement_noise, fps)[::-1]
-    kalman_data = (forward + backward) / 2
 
     log.info('kalman filter done.')
     return kalman_data
@@ -168,6 +152,71 @@ def apply_wrist_local_space_to_raw_data(landmarks_data:np.ndarray):
     for frame_idx in range(num_frames):
         wrist_rotation = LandmarksProcessor.estimate_frame_from_hand_points(landmarks_data[frame_idx])
         landmarks_data[frame_idx] @= wrist_rotation
+
+def vary_butterworth_cutoff_frequency(landmarks_data:np.ndarray):
+    cutoff_values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+    acceleration_results = []
+    jerk_results = []
+    direction_results = []
+
+    #compute raw metrics once
+    total_raw_acceleration = 0
+    total_raw_jerk = 0
+    total_raw_direction = 0
+    for i in range(21):
+        for j in range(3):
+            total_raw_acceleration += FilterBenchmark.acceleration_metric(landmarks_data[:, i, j])
+            total_raw_jerk += FilterBenchmark.jerk_metric(landmarks_data[:, i, j])
+            total_raw_direction += FilterBenchmark.direction_changes_metric(landmarks_data[:, i, j])
+
+    #varying cutoff frequency
+    for cutoff in cutoff_values:
+        butterworth_data = apply_butterworth_filter(landmarks_data, cutoff=cutoff)
+
+        total_mean_acceleration_butterworth = 0
+        total_mean_jerk_butterworth = 0
+        total_direction_changes_butterworth = 0
+        for i in range(21):
+            for j in range(3):
+                total_mean_acceleration_butterworth += FilterBenchmark.acceleration_metric(butterworth_data[:, i, j])
+                total_mean_jerk_butterworth += FilterBenchmark.jerk_metric(butterworth_data[:, i, j])
+                total_direction_changes_butterworth += FilterBenchmark.direction_changes_metric(butterworth_data[:, i, j])
+
+        acceleration_results.append(total_mean_acceleration_butterworth)
+        jerk_results.append(total_mean_jerk_butterworth)
+        direction_results.append(total_direction_changes_butterworth)
+
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+
+    # Mean Acceleration
+    axes[0].plot(cutoff_values, acceleration_results, marker='o', color='blue', label='Butterworth')
+    axes[0].axhline(y=total_raw_acceleration, color='red', linestyle='--', label='Raw')
+    axes[0].set_title('Mean Acceleration vs Cutoff Frequency')
+    axes[0].set_xlabel('Cutoff Frequency (Hz)')
+    axes[0].set_ylabel('Mean Acceleration')
+    axes[0].legend()
+
+    # Mean Jerk
+    axes[1].plot(cutoff_values, jerk_results, marker='o', color='orange', label='Butterworth')
+    axes[1].axhline(y=total_raw_jerk, color='red', linestyle='--', label='Raw')
+    axes[1].set_title('Mean Jerk vs Cutoff Frequency')
+    axes[1].set_xlabel('Cutoff Frequency (Hz)')
+    axes[1].set_ylabel('Mean Jerk')
+    axes[1].legend()
+
+    # Direction Changes
+    axes[2].plot(cutoff_values, direction_results, marker='o', color='green', label='Butterworth')
+    axes[2].axhline(y=total_raw_direction, color='red', linestyle='--', label='Raw')
+    axes[2].set_title('Direction Changes vs Cutoff Frequency')
+    axes[2].set_xlabel('Cutoff Frequency (Hz)')
+    axes[2].set_ylabel('Direction Changes')
+    axes[2].legend()
+
+    plt.tight_layout()
+    plt.show()
+
+
 
 def main(args):
     raw_data = None
@@ -188,12 +237,12 @@ def main(args):
         reshaped_data_raw = raw_data.reshape(raw_data.shape[0], -1)
         FilesManager.save_landmarks_data(reshaped_data_raw, COLUMNS, filedir / "raw.csv")
 
-    if args.filter_only:
-        filedir = Path(args.filter_only).parent
-        raw_data = FilesManager.load_landmarks_data(args.filter_only)
-        butterworth_data = apply_butterworth_filter(raw_data)
-        one_euro_data = apply_one_euro_filter(raw_data)
-        kalman_data = apply_kalman_filter(raw_data)
+    # if args.filter_only:
+    #     filedir = Path(args.filter_only).parent
+    #     raw_data = FilesManager.load_landmarks_data(args.filter_only)
+    #     butterworth_data = apply_butterworth_filter(raw_data)
+    #     one_euro_data = apply_one_euro_filter(raw_data)
+    #     kalman_data = apply_kalman_filter(raw_data)
 
     apply_wrist_local_space_to_raw_data(raw_data)
 
@@ -209,22 +258,33 @@ def main(args):
     reshaped_data_kalman = kalman_data.reshape(one_euro_data.shape[0], -1)
     FilesManager.save_landmarks_data(reshaped_data_kalman, COLUMNS, filedir / "kalman_data.csv")
 
-    ### plotting to see difference between raw and filtered data
-    plt.plot(raw_data[:, 8, 0])
-    plt.plot(raw_data[:, 8, 1])
-    plt.plot(raw_data[:, 8, 2])
-    plt.plot(kalman_data[:, 8, 0])
-    plt.plot(kalman_data[:, 8, 1])
-    plt.plot(kalman_data[:, 8, 2])
-    #plt.plot(one_euro_data[:, 8, 1])
-    #plt.plot(kalman_data[:, 8, 1])
-    plt.xlabel("Frame")
-    plt.ylabel("Y position")
-    plt.title("Index Fingertip Y Over Time")
-    plt.show()
+    #plotting
+    # filters = {
+    #     'Butterworth': butterworth_data,
+    #     'One Euro': one_euro_data,
+    #     'Kalman': kalman_data
+    # }
+    #
+    # for filter_name, filtered_data in filters.items():
+    #     plt.plot(raw_data[:, 8, 0], label='Raw X')
+    #     plt.plot(raw_data[:, 8, 1], label='Raw Y')
+    #     plt.plot(raw_data[:, 8, 2], label='Raw Z')
+    #     plt.plot(filtered_data[:, 8, 0], label=f'{filter_name} X')
+    #     plt.plot(filtered_data[:, 8, 1], label=f'{filter_name} Y')
+    #     plt.plot(filtered_data[:, 8, 2], label=f'{filter_name} Z')
+    #
+    #     plt.legend(fontsize=9, loc='upper left', bbox_to_anchor=(1, 1))
+    #     plt.xlabel("Frame", fontsize=10)
+    #     plt.ylabel("Position", fontsize=10)
+    #     plt.xticks(fontsize=10)
+    #     plt.yticks(fontsize=10)
+    #     plt.title(f"Index Fingertip Position Over Frames — {filter_name}", fontsize=12)
+    #     plt.savefig(f'pinch_01_fingertip_{filter_name.lower().replace(" ", "_")}.png', dpi=300, bbox_inches='tight')
+    #     plt.show()
 
     print("---------------------------- BENCHMARKS --------------------------------------")
 
+    #vary_butterworth_cutoff_frequency(raw_data)
     total_mean_acceleration_raw = 0
     total_mean_acceleration_butterworth = 0
     total_mean_acceleration_one_euro = 0
@@ -285,6 +345,6 @@ def main(args):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='MediaPipe Hand Optimization')
     parser.add_argument('--video', default=None, help='input path to a recorded video')
-    parser.add_argument('--filter-only', default=None, help='apply butterworth low-pass filter to smooth the raw data')
+    #parser.add_argument('--filter-only', default=None, help='apply butterworth low-pass filter to smooth the raw data')
 
     main(parser.parse_args())

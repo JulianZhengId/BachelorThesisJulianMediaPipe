@@ -66,62 +66,102 @@ class OneEuroFilter:
 
         return x_hat
 
+import numpy as np
+
 class KalmanFilter1D:
     """
     Kalman filter for a single dimension of a MediaPipe landmark.
     State: [position, velocity, acceleration]
+    Uses RTS (Rauch-Tung-Striebel) smoother for zero-phase optimal filtering.
     """
 
     def __init__(self, process_noise=1e-4, measurement_noise=1e-2, dt=1/30):
         self.dt = dt
 
-        # State: [position, velocity, acceleration]
-        self.x = np.zeros(3)
-
-        # State transition matrix
+        # State transition matrix — constant acceleration model
         self.F = np.array([
             [1, dt, 0.5 * dt**2],
             [0, 1,  dt],
             [0, 0,  1]
         ])
 
-        # Measurement matrix (we only observe position)
+        # Measurement matrix — only position is observed
         self.H = np.array([[1, 0, 0]])
 
-        # Covariance matrix
-        self.P = np.eye(3) * 1.0
+        # Initial covariance
+        self.P0 = np.eye(3) * 1.0
 
-        # Process noise
+        # Process noise covariance — constant acceleration noise model
         self.Q = process_noise * np.array([
-            [dt ** 4 / 4, dt ** 3 / 2, dt ** 2 / 2],
-            [dt ** 3 / 2, dt ** 2, dt],
-            [dt ** 2 / 2, dt, 1]
+            [dt**4/4, dt**3/2, dt**2/2],
+            [dt**3/2, dt**2,   dt],
+            [dt**2/2, dt,      1]
         ])
 
-        # Measurement noise
+        # Measurement noise covariance
         self.R = np.array([[measurement_noise]])
 
-        self.initialized = False
+    def smooth(self, signal: np.ndarray) -> np.ndarray:
+        """
+        Apply RTS smoother to a full 1D signal.
+        signal: array of shape (T,) — one coordinate dimension over all frames
+        Returns: smoothed signal of shape (T,)
+        """
+        n = len(signal)
 
-    def update(self, measurement):
-        if not self.initialized:
-            self.x[0] = measurement
-            self.initialized = True
-            return measurement
+        # Storage
+        xs     = np.zeros((n, 3))      # post-update states
+        Ps     = np.zeros((n, 3, 3))   # post-update covariances
+        Ps_pred = np.zeros((n, 3, 3))  # pre-update predicted covariances
 
-        # Predict
-        x_pred = self.F @ self.x
-        P_pred = self.F @ self.P @ self.F.T + self.Q
+        # --- Initialise at t=0 (update only, no prediction) ---
+        x = np.zeros(3)
+        x[0] = signal[0]              # initialise position with first measurement
+        P = self.P0.copy()
 
-        # Update
-        y = measurement - self.H @ x_pred              # residual
-        S = self.H @ P_pred @ self.H.T + self.R        # residual covariance
-        K = P_pred @ self.H.T @ np.linalg.inv(S)       # kalman gain
+        # Update at t=0 without prediction step
+        y = signal[0] - self.H @ x
+        S = self.H @ P @ self.H.T + self.R
+        K = P @ self.H.T @ np.linalg.inv(S)
+        x = x + (K @ y).flatten()
+        P = (np.eye(3) - K @ self.H) @ P
 
-        self.x = x_pred + (K @ y).flatten()
-        self.P = (np.eye(3) - K @ self.H) @ P_pred
+        xs[0]      = x
+        Ps[0]      = P
+        Ps_pred[0] = P  # no prediction at t=0, use post-update as placeholder
 
-        return self.x[0]
+        # --- Forward pass t=1 to n-1 ---
+        for t in range(1, n):
+            # Predict
+            x_pred = self.F @ x
+            P_pred = self.F @ P @ self.F.T + self.Q
+            Ps_pred[t] = P_pred        # store pre-update covariance
+
+            # Update
+            y = signal[t] - self.H @ x_pred
+            S = self.H @ P_pred @ self.H.T + self.R
+            K = P_pred @ self.H.T @ np.linalg.inv(S)
+            x = x_pred + (K @ y).flatten()
+            P = (np.eye(3) - K @ self.H) @ P_pred
+
+            xs[t] = x                  # store post-update state
+            Ps[t] = P                  # store post-update covariance
+
+        # --- Backward pass (RTS smoother) ---
+        xs_smooth = xs.copy()
+        Ps_smooth = Ps.copy()
+
+        for t in range(n - 2, -1, -1):
+            # Smoother gain: G_t = P_t @ F.T @ inv(P_{t+1|t})
+            G = Ps[t] @ self.F.T @ np.linalg.inv(Ps_pred[t + 1])
+
+            # Smoothed state
+            xs_smooth[t] = xs[t] + G @ (xs_smooth[t + 1] - self.F @ xs[t])
+
+            # Smoothed covariance
+            Ps_smooth[t] = Ps[t] + G @ (Ps_smooth[t + 1] - Ps_pred[t + 1]) @ G.T
+
+        return xs_smooth[:, 0]  # return position only
 
 
 class KalmanFilterND:
@@ -140,16 +180,17 @@ class KalmanFilterND:
         self.num_landmarks = num_landmarks
         self.num_dims = num_dims
 
-    def update(self, landmarks):
+    def smooth(self, landmarks: np.ndarray) -> np.ndarray:
         """
-        landmarks: array of shape (num_landmarks, num_dims)
-                   e.g. (21, 3) for hand
-        Returns: filtered landmarks, same shape
+        Apply RTS smoother to all landmarks.
+        landmarks: array of shape (num_frames, num_landmarks, num_dims)
+        Returns: smoothed landmarks, same shape
         """
         filtered = np.zeros_like(landmarks)
         for i in range(self.num_landmarks):
             for d in range(self.num_dims):
-                filtered[i, d] = self.filters[i][d].update(landmarks[i, d])
+                signal = landmarks[:, i, d]       # shape (num_frames,)
+                filtered[:, i, d] = self.filters[i][d].smooth(signal)
         return filtered
 
 class LandmarksProcessor:

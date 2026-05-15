@@ -1,0 +1,17 @@
+Spread 01
+---------------------------- BENCHMARKS --------------------------------------
+Total Mean Acceleration Raw Data: 0.08580679666179493
+Total Mean Acceleration Butterworth Data: 0.014197038189809075
+Total Mean Acceleration One Euro Data: 0.013232530484891564
+Total Mean Acceleration Kalman Data: 0.011083291720492378
+------------------------------------------------------------------------------
+Total Mean Jerk Raw Data: 0.14745819213620867
+Total Mean Jerk Butterworth Data: 0.006918569276647199
+Total Mean Jerk One Euro Data: 0.01668896343218764
+Total Mean Jerk Kalman Data: 0.0033994560414487432
+------------------------------------------------------------------------------
+Total Direction Changes Raw Data: 3696
+Total Direction Changes Butterworth Data: 1004
+Total Direction Changes One Euro Data: 1485
+Total Direction Changes Kalman Data: 771
+------------------------------------------------------------------------------

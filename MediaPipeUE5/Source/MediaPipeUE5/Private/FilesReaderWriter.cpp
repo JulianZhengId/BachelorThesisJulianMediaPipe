@@ -2,7 +2,7 @@
 
 bool FilesReaderWriter::ReadFile(const FString& Filepath, TArray<FString>& ResultStrings)
 {
-	GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Yellow,FString::Printf(TEXT("Reading file: %s"), *Filepath));
+	//GEngine->AddOnScreenDebugMessage(-1, 2.0f, FColor::Yellow,FString::Printf(TEXT("Reading file: %s"), *Filepath));
 
 	//check file exists
 	if (!FPlatformFileManager::Get().GetPlatformFile().FileExists(*Filepath))
